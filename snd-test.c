@@ -24,10 +24,23 @@
 #define ST_TX_FULL  (1<<22)
 #define ST_TX_RST_DON (1<<24)
 
+/* Reg. indices */
+#define REG_ST		0
+#define REG_IEN		1    /* IRQ enable     */
+#define REG_TX_RST  2    /* TX fifo reset  */
+#define    VAC_MSK     ((1<<12)-1)
+#define REG_TX_VAC  3    /* TX vacancy     */
+#define    RST_KEY     0x000000A5
+#define REG_TX      4    /* TX fifo        */
+#define REG_RX_RST  6    /* RX fifo reset  */
+#define REG_RX_OCC  7    /* RX occupancy   */
+#define REG_RX      8    /* RX fifo        */
+#define REG_TX_DEST 0xb  /* TX destination */
+
 static void
 ack_irq(Arm_MMIO mmio, uint32_t msk)
 {
-	iowrite32( mmio, 0, msk );
+	iowrite32( mmio, REG_ST, msk );
 }
 
 static int
@@ -66,20 +79,20 @@ uint32_t sta, vac;
 uint32_t msk = ST_TX_EMPTY;
 //uint32_t ste, sto, vaco, vace;
 
-//ste = ioread32(mmio,0);
-//vace = ioread32(mmio,3);
+//ste = ioread32(mmio,REG_ST);
+//vace = ioread32(mmio,REG_TX_VAC);
 
 	while ( sz ) {
 
-		while ( 0 == (vac = ioread32(mmio, 3) & ((1<<12)-1)) ) {
+		while ( 0 == (vac = (ioread32(mmio, REG_TX_VAC) & VAC_MSK) ) ) {
 
 			if ( irq ) {
 				block_irq(mmio, msk);
 				ack_irq( mmio, msk );
 				enb_irq(mmio);
 			} else {
-				while ( ! ((sta = ioread32(mmio, 0)) & msk) )
-//printf("lop - vac %u, sta %08x\n", ioread32(mmio,3), sta)
+				while ( ! ((sta = ioread32(mmio, REG_ST)) & msk) )
+//printf("lop - vac %u, sta %08x\n", ioread32(mmio, REG_TX_VAC) & VAC_MSK, sta)
 					;
 				ack_irq( mmio, ST_TX_EMPTY|ST_TX_FULL );
 			}
@@ -91,14 +104,14 @@ uint32_t msk = ST_TX_EMPTY;
 			vac = sz;
 
 		for ( i=0; i<vac; i++ )
-			iowrite32(mmio, 4, tab[i]);
+			iowrite32(mmio, REG_TX, tab[i]);
 
 		tab += vac;
 		sz  -= vac;
 
 	}
-//sto = ioread32(mmio, 0);
-//vaco = ioread32(mmio,3);
+//sto = ioread32(mmio, REG_ST);
+//vaco = ioread32(mmio,REG_TX_VAC) & VAC_MSK;
 //printf("entry %08x, now %08x, vac %u, now %u\n", ste, sto, vace, vaco);
 
 	return 0;
@@ -107,15 +120,17 @@ uint32_t msk = ST_TX_EMPTY;
 
 static void usage(const char *nm)
 {
-	fprintf(stderr,"Usage: %s [-h] [-D <nsamples>] [-p <nsamples>] [-lr] [i] [-s] [-b <size>]\n", nm);
-	fprintf(stderr,"          Fill fifo with sine wave\n");
-	fprintf(stderr,"  -D <n>  Read fifo to stdout (n samples)\n");
-	fprintf(stderr,"      -l  Fill left (default)\n");
-	fprintf(stderr,"      -r  Fill right\n");
+	fprintf(stderr,"Usage: %s [-h] [-r <nsamples>] [-p <nsamples>] [-D <dest>] [-a <a>] [-lr] [i] [-s] [-b <size>]\n", nm);
+	fprintf(stderr,"          Fill fifo with sine wave or stdin\n");
+	fprintf(stderr,"  -r <n>  Read fifo to stdout (n samples)\n");
+	fprintf(stderr,"      -L  Fill left (default)\n");
+	fprintf(stderr,"      -R  Fill right\n");
 	fprintf(stderr,"      -i  Run interrupt driven\n");
 	fprintf(stderr,"  -p <n>  Discard first 'n' samples (default: %i)\n", P_DFLT);
 	fprintf(stderr,"  -s      Stream stdin\n");
 	fprintf(stderr,"  -b <n>  Stream buffer size\n");
+	fprintf(stderr,"  -D <d>  Stream destination address\n");
+	fprintf(stderr,"  -a <a>  Set amplitude of sine wave\n");
 }
 
 static void
@@ -124,34 +139,36 @@ read_init(Arm_MMIO mmio)
 uint32_t mske = ST_RX_FULL;
 uint32_t msk  = mske | ST_RX_RST_DON;
 
-	iowrite32(mmio, 0, msk);
+	iowrite32(mmio, REG_ST, msk);
 
 	/* Reset FIFO */
-	iowrite32(mmio, 6, 0x000000A5);
-	while ( ! (ioread32(mmio, 0) & ST_RX_RST_DON) ) 
+	iowrite32(mmio, REG_RX_RST, RST_KEY);
+	while ( ! (ioread32(mmio, REG_ST) & ST_RX_RST_DON) ) 
 		;
 	/* Clear irqs */
-	iowrite32(mmio, 0, msk);
+	iowrite32(mmio, REG_ST, msk);
 
 	/* Enable irqs */
-	iowrite32(mmio, 1, mske);
+	iowrite32(mmio, REG_IEN, mske);
 }
 
 static void
-fill_init(Arm_MMIO mmio)
+fill_init(Arm_MMIO mmio, uint32_t dest)
 {
 uint32_t mske = ST_TX_EMPTY;
 uint32_t msk  = mske | ST_TX_RST_DON;
 
-	iowrite32(mmio, 0, msk );
+	iowrite32(mmio, REG_ST, msk );
 
 	/* Reset FIFO */
-	iowrite32(mmio, 2, 0x000000A5);
-	while ( ! (ioread32(mmio, 0) & ST_TX_RST_DON) ) 
+	iowrite32(mmio, REG_TX_RST, RST_KEY);
+	while ( ! (ioread32(mmio, REG_ST) & ST_TX_RST_DON) ) 
 		;
 
+	iowrite32(mmio, REG_TX_DEST, dest);
+
 	/* Enable irqs */
-	iowrite32(mmio, 1, mske);
+	iowrite32(mmio, REG_IEN, mske);
 }
 
 uint32_t
@@ -167,20 +184,20 @@ uint32_t msk = ST_RX_FULL;
 		if ( irq ) {
 			block_irq(mmio, msk);
 		} else {
-			while ( ! (ioread32(mmio, 0) & msk) )
+			while ( ! (ioread32(mmio, REG_ST) & msk) )
 				;
 		}
-		occ = ioread32(mmio, 7) & ((1<<12)-1);
+		occ = ioread32(mmio, REG_RX_OCC) & VAC_MSK;
 		n = pre > occ  ? occ : pre;
 		for ( i=0; i<n; i++ ) {
-			ioread32(mmio,8); /* toss */
+			ioread32(mmio,REG_RX); /* toss */
 		}
 		pre -= n;
 		n    = occ - n;
 		if ( n > sz )
 			n = sz;
 		for ( i=0; i<n; i++ ) {
-			*(buf++) = ioread32(mmio, 8);
+			*(buf++) = ioread32(mmio, REG_RX);
 		}
 
 		ack_irq(mmio, msk);
@@ -205,9 +222,12 @@ int         shft     = 0;
 unsigned    nsamples = 0;
 unsigned    pre      = P_DFLT;
 unsigned long long p;
+float       amp      = AMP;
+unsigned    au       = -1;
 
 uint32_t   *dat      = 0;
 uint32_t    msk      = 0;
+unsigned    dest     = 0;
 unsigned   *u_p;
 int         use_irq  = 0;
 unsigned    bufsz    = 0;
@@ -215,7 +235,7 @@ int         strm     = 0;
 int         do_rd    = 0;
 int         got;
 
-	while ( (ch = getopt(argc, argv, "D:hlrp:isb:")) > 0 ) {
+	while ( (ch = getopt(argc, argv, "D:r:hLRp:isb:a:")) > 0 ) {
 		u_p      = 0;
 		switch (ch) {
 			case 'h': rval = 0;
@@ -223,20 +243,28 @@ int         got;
 				usage(argv[0]);
 				return rval;
 
-			case 'D':
+			case 'a':
+				u_p   = &au;
+			break;
+
+			case 'r':
 				u_p   = &nsamples;
 				do_rd = 1;
 			break;
 
-			case 'p':
-				u_p = &pre;
+			case 'D':
+				u_p   = &dest;
 			break;
 
-			case 'l':
+			case 'p':
+				u_p  = &pre;
+			break;
+
+			case 'L':
 				shft = 0;
 			break;
 
-			case 'r':
+			case 'R':
 				shft = 16;
 			break;
 
@@ -260,6 +288,9 @@ int         got;
 			*u_p = p;
 		}
 	}
+
+	if ( au < 32768 )
+		amp = (float)au;
 	
 	if ( 0 == nsamples )
 		nsamples = 10*NP;
@@ -278,7 +309,7 @@ int         got;
 	
 	if ( ! do_rd && !strm ) {
 		for (i=0; i<bufsz; i++) {
-			dat[i] = (uint32_t)( ((uint16_t)(int16_t)rintf(AMP * sinf(2.*3.141592654/(float)NP*(float)i))) << shft );
+			dat[i] = (uint32_t)( ((uint16_t)(int16_t)rintf(amp * sinf(2.*3.141592654/(float)NP*(float)i))) << shft );
 		}
 	}
 
@@ -290,7 +321,7 @@ int         got;
 	if ( do_rd ) {
 		read_init(mmio);
 	} else {
-		fill_init(mmio);
+		fill_init(mmio, (uint32_t) dest);
 	}
 
 	if ( use_irq )
