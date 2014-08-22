@@ -120,7 +120,7 @@ uint32_t msk = ST_TX_EMPTY;
 
 static void usage(const char *nm)
 {
-	fprintf(stderr,"Usage: %s [-h] [-r <nsamples>] [-p <nsamples>] [-D <dest>] [-a <a>] [-lr] [i] [-s] [-b <size>]\n", nm);
+	fprintf(stderr,"Usage: %s [-h] [-r <nsamples>] [-P period] [-p <nsamples>] [-D <dest>] [-a <a>] [-lr] [i] [-s] [-b <size>]\n", nm);
 	fprintf(stderr,"          Fill fifo with sine wave or stdin\n");
 	fprintf(stderr,"  -r <n>  Read fifo to stdout (n samples)\n");
 	fprintf(stderr,"      -L  Fill left (default)\n");
@@ -131,6 +131,7 @@ static void usage(const char *nm)
 	fprintf(stderr,"  -b <n>  Stream buffer size\n");
 	fprintf(stderr,"  -D <d>  Stream destination address\n");
 	fprintf(stderr,"  -a <a>  Set amplitude of sine wave\n");
+	fprintf(stderr,"  -P <p>  Set period (#samples) of sine wave\n");
 }
 
 static void
@@ -220,6 +221,7 @@ int         ch;
 int         rval     = 1;
 int         shft     = 0;
 unsigned    nsamples = 0;
+unsigned    period   = NP;
 unsigned    pre      = P_DFLT;
 unsigned long long p;
 float       amp      = AMP;
@@ -235,7 +237,7 @@ int         strm     = 0;
 int         do_rd    = 0;
 int         got;
 
-	while ( (ch = getopt(argc, argv, "D:r:hLRp:isb:a:")) > 0 ) {
+	while ( (ch = getopt(argc, argv, "D:r:hLRp:isb:a:P:")) > 0 ) {
 		u_p      = 0;
 		switch (ch) {
 			case 'h': rval = 0;
@@ -258,6 +260,10 @@ int         got;
 
 			case 'p':
 				u_p  = &pre;
+			break;
+
+			case 'P':
+				u_p = &period;
 			break;
 
 			case 'L':
@@ -293,13 +299,13 @@ int         got;
 		amp = (float)au;
 	
 	if ( 0 == nsamples )
-		nsamples = 10*NP;
+		nsamples = 10*period;
 
 	if ( bufsz == 0 )
 		bufsz    = 900;
 
 	if ( !strm )
-		bufsz = do_rd ? nsamples : NP;
+		bufsz = do_rd ? nsamples : period;
 
 	if ( ! (dat = calloc(bufsz, sizeof(*dat))) ) {
 		fprintf(stderr,"Unable to allocate memory\n");
@@ -309,7 +315,7 @@ int         got;
 	
 	if ( ! do_rd && !strm ) {
 		for (i=0; i<bufsz; i++) {
-			dat[i] = (uint32_t)( ((uint16_t)(int16_t)rintf(amp * sinf(2.*3.141592654/(float)NP*(float)i))) << shft );
+			dat[i] = (uint32_t)( ((uint16_t)(int16_t)rintf(amp * sinf(2.*3.141592654/(float)period*(float)i))) << shft );
 		}
 	}
 
