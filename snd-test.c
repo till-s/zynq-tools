@@ -131,7 +131,7 @@ static void usage(const char *nm)
 	fprintf(stderr,"  -b <n>  Stream buffer size\n");
 	fprintf(stderr,"  -D <d>  Stream destination address\n");
 	fprintf(stderr,"  -a <a>  Set amplitude of sine wave\n");
-	fprintf(stderr,"  -P <p>  Set period (#samples) of sine wave\n");
+	fprintf(stderr,"  -P <p>  Set period (#samples) of sine wave (default %u)\n", NP);
 }
 
 static void
