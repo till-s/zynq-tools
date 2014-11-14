@@ -128,6 +128,7 @@ static void usage(const char *nm)
 	fprintf(stderr,"      -i  Run interrupt driven\n");
 	fprintf(stderr,"  -p <n>  Discard first 'n' samples (default: %i)\n", P_DFLT);
 	fprintf(stderr,"  -s      Stream stdin\n");
+	fprintf(stderr,"  -S      Dump signed numbers\n");
 	fprintf(stderr,"  -b <n>  Stream buffer size\n");
 	fprintf(stderr,"  -D <d>  Stream destination address\n");
 	fprintf(stderr,"  -a <a>  Set amplitude of sine wave\n");
@@ -236,8 +237,9 @@ unsigned    bufsz    = 0;
 int         strm     = 0;
 int         do_rd    = 0;
 int         got;
+int         fmt_sgnd = 0;
 
-	while ( (ch = getopt(argc, argv, "D:r:hLRp:isb:a:P:")) > 0 ) {
+	while ( (ch = getopt(argc, argv, "D:r:hLRp:isSb:a:P:")) > 0 ) {
 		u_p      = 0;
 		switch (ch) {
 			case 'h': rval = 0;
@@ -284,6 +286,10 @@ int         got;
 
 			case 's':
 				strm = 1;
+			break;
+
+			case 'S':
+				fmt_sgnd = 1;
 			break;
 		}
 		if ( u_p ) {
@@ -354,8 +360,14 @@ int         got;
 	arm_mmio_exit(mmio);
 
 	if ( do_rd && !rval ) {
-		for ( i=0; i<nsamples; i++ ) {
-			printf("%08x\n", dat[i]);
+		if ( fmt_sgnd ) {
+			for ( i=0; i<nsamples; i++ ) {
+				printf("%6"PRIi16" %6"PRIi16"\n", (int16_t)((dat[i]>>16)&0xffff), (int16_t)(dat[i]&0xffff));
+			}
+		} else {
+			for ( i=0; i<nsamples; i++ ) {
+				printf("%08x\n", dat[i]);
+			}
 		}
 	}
 	free( dat );
