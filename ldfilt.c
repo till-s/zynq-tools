@@ -8,6 +8,8 @@
 #define REG_IDX_COEFF_ADDR 1
 #  define COEFF_ADDR_FDI   (1<<31) /* address FDI coefficients if set, FIR if clear */
 #define REG_IDX_COEFF_DATA 2
+#define REG_IDX_FIR_CSR    3
+#define FIR_CSR_BYPASS_EN  (1<<0)
 #define REG_IDX_FDI_INFO   4
 #define REG_IDX_FDI_NUM    5
 #define REG_IDX_FDI_DEN    6
@@ -21,10 +23,26 @@
 static void
 usage(const char *nm)
 {
-	fprintf(stderr,"Usage: %s [-v] [-B] [-d dev] [-f coeff-file] [-N numerator -D denominator] [-h]\n", nm);
+	fprintf(stderr,"Usage: %s [-v] [-Bbe] [-d dev] [-s scale] [-f coeff-file] [-N numerator -D denominator] [-h]\n", nm);
 	fprintf(stderr,"          program FIR or FDI filter coefficients\n");
 	fprintf(stderr,"          If -N/-D (both) are given then the FDI is programmed, otherwise the FIR\n");
 	fprintf(stderr,"      -B: set coefficients to effectively bypass FDI\n");
+	fprintf(stderr,"      -b: bypass the FIR\n");
+	fprintf(stderr,"      -s: scale coefficients\n");
+	fprintf(stderr,"      -e: enable the FIR (automatical if -b not given but coefficients are)\n");
+	fprintf(stderr,"      -v: dump info; -vv dump more info\n");
+}
+
+static int
+fir_bypass(Arm_MMIO m, int bypass)
+{
+uint32_t d;
+	d = ioread32(m, REG_IDX_FIR_CSR);
+	if ( bypass )
+		d |=  FIR_CSR_BYPASS_EN;
+	else
+		d &= ~FIR_CSR_BYPASS_EN;
+	iowrite32(m, REG_IDX_FIR_CSR, d);
 }
 
 static int
@@ -93,7 +111,7 @@ const char *fnam  = 0;
 FILE  *f = 0;
 int16_t coeffs[CMAX];
 double  dcoeffs[DMAX];
-int   ncoeffs = 0;
+int   ncoeffs = 0, ncoeffs_fw;
 int   ci;
 int   i,j;
 int   verb = 0;
@@ -104,11 +122,14 @@ int      isfdi = 0;
 uint32_t num = 0, den = 0;
 long     l;
 uint32_t *ap;
-double   scl,sclp, max;
+double   *dp;
+double   scl,sclp, max, uscl = 1.0;
 int      bypass_fdi = 0;
+int      bypass_fir = -1;
 
-	while ( (opt = getopt(argc, argv, "vhBd:f:N:D:")) > 0 ) {
+	while ( (opt = getopt(argc, argv, "vhBbed:f:N:D:s:")) > 0 ) {
 		ap = 0;
+		dp = 0;
 		switch ( opt ) {
 			case 'h': rval = 0;
 			default:
@@ -124,14 +145,25 @@ int      bypass_fdi = 0;
 
 			case 'B': bypass_fdi = 1; num = den = 128; break;
 
-			case 'v': verb = 1; break;
+			case 'b': bypass_fir = 1; break;
+			case 'e': bypass_fir = 0; break;
+
+			case 'v': verb++; break;
+
+			case 's': dp = &uscl; break;
 		}
 		if ( ap ) {
 			if ( 1 != sscanf(optarg,"%li",&l) ) {
-				fprintf(stderr,"Error: unable to parse argument to %c option: %s\n", opt, optarg);
+				fprintf(stderr,"Error: unable to parse (int) argument to %c option: %s\n", opt, optarg);
 				return rval;
 			}
 			*ap = (uint32_t)l;
+		}
+		if ( dp ) {
+			if ( 1 != sscanf(optarg,"%lg", dp) ) {
+				fprintf(stderr,"Error: unable to parse (double) argument to %c option: %s\n", opt, optarg);
+				return rval;
+			}
 		}
 	}
 
@@ -160,16 +192,18 @@ int      bypass_fdi = 0;
 	}
 
 	d  = ioread32(m, REG_IDX_FIR_INFO);
+
+	ncoeffs_fw = (1<<((d&0xffff)-1));
 	if ( verb ) {
 		printf("FIR/FDI Coefficient length:     %4i\n", (d>>16));
-		printf("# (symmetric) FIR Coefficients: %4i\n", (1<<((d&0xffff)-1)));
+		printf("# (symmetric) FIR Coefficients: %4i\n", ncoeffs_fw);
 	}
 
 	d1 = ioread32(m, REG_IDX_FDI_INFO);
 
 	i=((d1>>4) & 0xf);
 	if ( verb ) {
-		printf("FDI Length: %2i\n", i);
+		printf("FDI Length:                       %2i\n", i);
 	}
 
 	if ( i != FDI_LEN ) {
@@ -179,7 +213,7 @@ int      bypass_fdi = 0;
 
 	i=((d1>>0) & 0xf);
 	if ( verb ) {
-		printf("FDI Order:  %2i\n", i);
+		printf("FDI Order:                        %2i\n", i);
 	}
 
 	if ( i != FDI_ORD ) {
@@ -193,6 +227,9 @@ int      bypass_fdi = 0;
 	}
 
 	if ( f ) {
+		/* pick default if no -b/-e given */
+		if ( bypass_fir < 0 )
+			bypass_fir = 0;
 		while ( ncoeffs < sizeof(coeffs)/sizeof(coeffs[0]) && ! feof(f) ) {
 			if ( 1 != fscanf(f,"%x", &ci) ) {
 				if ( feof(f) )
@@ -204,16 +241,23 @@ int      bypass_fdi = 0;
 			ncoeffs++;
 		}
 
-		i = (1<<((d&0xffff)-1));
-		if ( ncoeffs != i ) {
-			fprintf(stderr,"File contains %i coefficients, expected %i\n", ncoeffs, i);
+		if ( ncoeffs != ncoeffs_fw ) {
+			fprintf(stderr,"File contains %i coefficients, expected %i\n", ncoeffs, ncoeffs_fw);
 			goto bail;
+		}
+
+		if ( uscl != 1.0 ) {
+			for ( i=0; i<ncoeffs; i++ ) {
+				coeffs[i] = (int16_t)rint((double)coeffs[i]*uscl);
+			}
 		}
 
 		if ( prog_coeffs(m, coeffs, ncoeffs, 0 ) )
 			goto bail;
-
 	}
+
+	if ( bypass_fir >= 0 )
+		fir_bypass(m, bypass_fir);
 
 	if ( num ) {
 		// scale num + den up...
@@ -249,7 +293,7 @@ int      bypass_fdi = 0;
 				i--;
 			}
 		}
-		scl = (double)((1<<(CLEN-1))-2) / max;
+		scl = uscl * (double)((1<<(CLEN-1))-2) / max;
 		if ( verb ) {
 			printf("FDI Coefficients scl %g, max %g\n", scl, max);
 			printf("FDI Coefficients (NUM: %"PRIu32", DEN: %"PRIu32")\n", num, den);
@@ -267,6 +311,37 @@ int      bypass_fdi = 0;
 
 		iowrite32(m, REG_IDX_FDI_NUM, num);
 		iowrite32(m, REG_IDX_FDI_DEN, den);
+	}
+
+	if ( verb ) {
+		printf("FIR Bypass:              %s engaged\n",
+			(ioread32(m, REG_IDX_FIR_CSR) & FIR_CSR_BYPASS_EN) ? "   " : "not");
+		printf("FDI Numerator:                 %4i\n", ioread32(m, REG_IDX_FDI_NUM));
+		printf("FDI Denominator:               %4i\n", ioread32(m, REG_IDX_FDI_DEN));
+
+		if ( verb > 1 ) {
+			printf("FIR Coefficients: (one half of symmetric impulse response)\n");
+			for ( i=0; i<ncoeffs_fw; i++ ) {
+				iowrite32(m, REG_IDX_COEFF_ADDR, i);
+				coeffs[0] = ioread32(m, REG_IDX_COEFF_DATA);
+				printf("  %04"PRIx16" (%6"PRIi16")\n", (coeffs[0] & 0xffff), coeffs[0]);
+			}
+
+			ncoeffs = (FDI_LEN+1)/2 * (FDI_ORD + 1);
+			for ( i=0; i<ncoeffs; i++ ) {
+				iowrite32(m, REG_IDX_COEFF_ADDR, COEFF_ADDR_FDI + i);
+				coeffs[i] = ioread32(m, REG_IDX_COEFF_DATA);
+			}
+			printf("FDI Coefficients (vertical: delay/lag):\n");
+			printf("                         Order/power\n");
+			printf("       0              1              2              3\n");
+			for ( i=0; i<(FDI_LEN+1)/2; i++ ) {
+				for ( j = (FDI_LEN+1)/2*FDI_ORD; j >= 0; j-=(FDI_LEN+1)/2 ) {
+					printf("  %04"PRIx16" (%6"PRIi16")", coeffs[i+j] & 0xffff, coeffs[i+j]);
+				}
+				printf("\n");
+			}
+		}
 	}
 
 bail:
