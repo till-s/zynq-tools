@@ -19,15 +19,22 @@
 
 #define FDI_LEN 5
 #define FDI_ORD 3
+#define N_FDI_COEFFS (((FDI_LEN)+1)/2 * (FDI_ORD + 1))
+
+union co_p {
+	int16_t  *s_p;
+	double   *d_p;
+};
 
 static void
 usage(const char *nm)
 {
-	fprintf(stderr,"Usage: %s [-v] [-Bbe] [-d dev] [-s scale] [-f coeff-file] [-N numerator -D denominator] [-h]\n", nm);
+	fprintf(stderr,"Usage: %s [-v] [-Bbe] [-d dev] [-s scale] [-f fir-coeff-file] [-F fdi-coeff-file] [-N numerator -D denominator] [-h]\n", nm);
 	fprintf(stderr,"          program FIR or FDI filter coefficients\n");
 	fprintf(stderr,"          If -N/-D (both) are given then the FDI is programmed, otherwise the FIR\n");
 	fprintf(stderr,"      -B: set coefficients to effectively bypass FDI\n");
 	fprintf(stderr,"      -b: bypass the FIR\n");
+	fprintf(stderr,"      -F: set FDI coeffs (for debugging; otherwise use built-in default!)\n");
 	fprintf(stderr,"      -s: scale coefficients\n");
 	fprintf(stderr,"      -e: enable the FIR (automatical if -b not given but coefficients are)\n");
 	fprintf(stderr,"      -v: dump info; -vv dump more info\n");
@@ -83,7 +90,7 @@ uint32_t d;
  * Due to symmetry the coefficients for positive delays (past samples)
  * are not required.
  */
-static double fdi_5_4_coeffs[12] = {
+static double fdi_5_4_coeffs[N_FDI_COEFFS] = {
        0.157929,
       -0.279339,
               0,
@@ -101,18 +108,50 @@ static double fdi_5_4_coeffs[12] = {
 #define CMAX 2048
 #define DMAX 30
 
+static int read_coeffs(const char *fnam, const char *to_fmt, void *to, size_t to_elsz, size_t to_nels)
+{
+FILE       *f = 0;
+int         ncoeffs;
+
+	if ( ! strcmp(fnam, "-") ) {
+		f    = stdin;
+		fnam = 0;
+	} else if (  !(f = fopen(fnam,"r")) ) {
+		perror("Opening file for reading");
+		return -1;
+	}
+
+	for ( ncoeffs = 0; ncoeffs < to_nels && ! feof(f); ncoeffs++ ) {
+		if ( 1 != fscanf(f, to_fmt, to) ) {
+				if ( feof(f) )
+					break;
+				fprintf(stderr,"Error reading number (line %i)\n", ncoeffs+1);
+				ncoeffs = -1;
+				goto bail;
+		}
+		to += to_elsz;
+	}
+
+bail:
+
+	if ( fnam && f )
+		fclose( f );
+
+	return ncoeffs;
+}
+
+#define READ_COEFFS(nam, fmt, arr) read_coeffs((nam), (fmt), (arr), sizeof((arr)[0]), sizeof(arr)/sizeof((arr)[0]))
+
 int
 main(int argc, char **argv)
 {
 const char *devnm = "/dev/uio3";
 int opt;
 int   rval = 1;
-const char *fnam  = 0;
-FILE  *f = 0;
+const char *fnam  = 0, *Fnam = 0;
 int16_t coeffs[CMAX];
 double  dcoeffs[DMAX];
 int   ncoeffs = 0, ncoeffs_fw;
-int   ci;
 int   i,j;
 int   verb = 0;
 Arm_MMIO m = 0;
@@ -127,7 +166,7 @@ double   scl,sclp, max, uscl = 1.0;
 int      bypass_fdi = 0;
 int      bypass_fir = -1;
 
-	while ( (opt = getopt(argc, argv, "vhBbed:f:N:D:s:")) > 0 ) {
+	while ( (opt = getopt(argc, argv, "vhBbed:f:F:N:D:s:")) > 0 ) {
 		ap = 0;
 		dp = 0;
 		switch ( opt ) {
@@ -139,6 +178,8 @@ int      bypass_fir = -1;
 			case 'd': devnm = optarg; break;
 		
 			case 'f': fnam  = optarg; break;
+
+			case 'F': Fnam  = optarg; break;
 
 			case 'N': ap = &num; break;
 			case 'D': ap = &den; break;
@@ -175,15 +216,6 @@ int      bypass_fir = -1;
 	if ( den > (1<<(CLEN-1))-1 ) {
 		fprintf(stderr,"Error: Max denominator is %u\n", (1<<(CLEN-1))-1);
 		return rval;
-	}
-
-	if ( fnam ) {
-		if ( ! strcmp(fnam, "-") ) {
-			f = stdin;
-		} else if (  !(f = fopen(fnam,"r")) ) {
-			perror("Opening file for reading");
-			return rval;
-		}
 	}
 
 	if ( ! (m = arm_mmio_init(devnm)) ) {
@@ -226,20 +258,15 @@ int      bypass_fir = -1;
 		goto bail;
 	}
 
-	if ( f ) {
+	if ( fnam ) {
 		/* pick default if no -b/-e given */
 		if ( bypass_fir < 0 )
 			bypass_fir = 0;
-		while ( ncoeffs < sizeof(coeffs)/sizeof(coeffs[0]) && ! feof(f) ) {
-			if ( 1 != fscanf(f,"%x", &ci) ) {
-				if ( feof(f) )
-					break;
-				fprintf(stderr,"Error reading integer (line %i)\n", ncoeffs+1);
-				goto bail;
-			}
-			coeffs[ncoeffs] = (int16_t)(uint16_t)(ci&0xffff);
-			ncoeffs++;
-		}
+
+		ncoeffs = READ_COEFFS( fnam, "%x", coeffs );
+
+		if ( ncoeffs < 0 )
+			goto bail;
 
 		if ( ncoeffs != ncoeffs_fw ) {
 			fprintf(stderr,"File contains %i coefficients, expected %i\n", ncoeffs, ncoeffs_fw);
@@ -254,6 +281,16 @@ int      bypass_fir = -1;
 
 		if ( prog_coeffs(m, coeffs, ncoeffs, 0 ) )
 			goto bail;
+	}
+
+	if ( Fnam ) {
+		ncoeffs = READ_COEFFS(Fnam, "%lg", fdi_5_4_coeffs);
+		if ( ncoeffs < 0 )
+			goto bail;
+		if ( ncoeffs != N_FDI_COEFFS ) {
+			fprintf(stderr, "Wrong number of FDI coefficients -- got %i but need exactly %i\n", ncoeffs, N_FDI_COEFFS);
+			goto bail;
+		}
 	}
 
 	if ( bypass_fir >= 0 )
@@ -327,7 +364,7 @@ int      bypass_fir = -1;
 				printf("  %04"PRIx16" (%6"PRIi16")\n", (coeffs[0] & 0xffff), coeffs[0]);
 			}
 
-			ncoeffs = (FDI_LEN+1)/2 * (FDI_ORD + 1);
+			ncoeffs = N_FDI_COEFFS;
 			for ( i=0; i<ncoeffs; i++ ) {
 				iowrite32(m, REG_IDX_COEFF_ADDR, COEFF_ADDR_FDI + i);
 				coeffs[i] = ioread32(m, REG_IDX_COEFF_DATA);
@@ -345,8 +382,6 @@ int      bypass_fir = -1;
 	}
 
 bail:
-	if ( fnam && f )
-		fclose(f);
 	if ( m )
 		arm_mmio_exit(m);
 	return rval;
