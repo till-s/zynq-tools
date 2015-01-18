@@ -10,8 +10,12 @@
 
 static void usage(const char *nm)
 {
-	fprintf(stderr,"Usage: %s [-h] [-d <uio-device-file>] reg-no [val]\n", nm);
+	fprintf(stderr,"Usage: %s [-h] [-d <uio-device-file>] [-w <width>] reg-no [val]\n", nm);
 	fprintf(stderr,"       NOTE: reg-no is 32-bit register #, NOT byte offset\n", nm);
+	fprintf(stderr,"    HOWEVER: if '-w <width>' is given (1,2 or 4) then the\n");
+	fprintf(stderr,"             offset IS a byte offset and thus '-w' allows\n");
+	fprintf(stderr,"             for arbitrary, unaligned access\n");
+
 }
 
 int
@@ -24,8 +28,9 @@ Arm_MMIO mio = 0;
 int  opt;
 long long v;
 int  drain = 0;
+int  wid   = 0;
 
-	while ( (opt = getopt(argc, argv, "hd:D")) > 0 ) {
+	while ( (opt = getopt(argc, argv, "hd:Dw:")) > 0 ) {
 		switch ( opt ) {
 			case 'h': rval = 0;
 			default: 
@@ -33,6 +38,14 @@ int  drain = 0;
 				return rval;
 
 			case 'd': fnam = optarg;
+				break;
+
+			case 'w': 
+				if ( 1 != sscanf(optarg, "%lli", &v) || ( 1 != v && 2 != v && 4 != v)  ) {
+					fprintf(stderr,"Invalid -w arg: must be 1,2 or 4\n");
+					return 1;
+				}
+				wid = (int) v;
 				break;
 
 			case 'D': drain = 1;
@@ -69,10 +82,26 @@ int  drain = 0;
 				}
 			}
 		} else {
-			if ( i )
-				iowrite32( mio, o, v );
-			else
-				printf("0x%08x: 0x%08x\n", o, ioread32(mio, o));
+			volatile uint8_t *a = (volatile uint8_t*)mio->bar;
+			a += o;
+			if ( i ) {
+				switch ( wid ) {
+					default: iowrite32( mio, o, v ); break;
+					case 1:  *a = (uint8_t)v; break;
+					case 2:  *(volatile uint16_t*)a = (uint16_t)v; break;
+					case 4:  *(volatile uint32_t*)a = (uint32_t)v; break;
+				}
+			} else {
+				uint32_t rv;
+				const char *pre = "byte";
+				switch ( wid ) {
+					default: rv = ioread32(mio, o); pre = "reg"; break;
+					case 1:  rv = (uint32_t)*a; break;
+					case 2:  rv = (uint32_t)*(volatile uint16_t*)a; break;
+					case 4:  rv = *(volatile uint32_t*)a; break;
+				}
+				printf("%s offset 0x%08x: 0x%08x\n", pre, o, rv);
+			}
 		}
 	} else {
 
