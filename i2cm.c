@@ -66,7 +66,9 @@ Arm_MMIO mio = io->handle.mio;
 	iowrite32(mio, CSR, cmd);
 	/* enable IRQ   */
 	/* block for completion */
-	read( mio->fd );
+	if ( sizeof(status) != read( mio->fd, &status, sizeof(status) ) ) {
+		fprintf(stderr,"Blocking for IRQ -- read error\n");
+	}
 	/* enable IRQ   */
 	status = ioread32(mio, CSR);
 	/* enable IRQ   */
