@@ -10,11 +10,12 @@
 
 static void usage(const char *nm)
 {
-	fprintf(stderr,"Usage: %s [-h] [-d <uio-device-file>] [-w <width>] reg-no [val]\n", nm);
+	fprintf(stderr,"Usage: %s [-h] [-d <uio-device-file>] [-s ld_size] [-w <width>] reg-no [val]\n", nm);
 	fprintf(stderr,"       NOTE: reg-no is 32-bit register #, NOT byte offset\n", nm);
 	fprintf(stderr,"    HOWEVER: if '-w <width>' is given (1,2 or 4) then the\n");
 	fprintf(stderr,"             offset IS a byte offset and thus '-w' allows\n");
 	fprintf(stderr,"             for arbitrary, unaligned access\n");
+	fprintf(stderr,"         -s  map 1<<ld_size bytes\n");
 
 }
 
@@ -29,8 +30,11 @@ int  opt;
 long long v;
 int  drain = 0;
 int  wid   = 0;
+int  siz   = 12;
+int  *i_p;
 
-	while ( (opt = getopt(argc, argv, "hd:Dw:")) > 0 ) {
+	while ( (opt = getopt(argc, argv, "hd:Dw:s:")) > 0 ) {
+		i_p = 0;
 		switch ( opt ) {
 			case 'h': rval = 0;
 			default: 
@@ -41,18 +45,31 @@ int  wid   = 0;
 				break;
 
 			case 'w': 
-				if ( 1 != sscanf(optarg, "%lli", &v) || ( 1 != v && 2 != v && 4 != v)  ) {
-					fprintf(stderr,"Invalid -w arg: must be 1,2 or 4\n");
-					return 1;
-				}
-				wid = (int) v;
+				i_p = &wid;
+				break;
+
+			case 's':
+				i_p = &siz;
 				break;
 
 			case 'D': drain = 1;
 				break;
 		}
+		if ( i_p ) {
+			if ( 1 != sscanf(optarg, "%lli", &v) ) {
+				fprintf(stderr,"Invalid -%c arg: cannot scan into integer\n", opt);
+			return 1;
+			}
+			*i_p = (int)v;
+		}
 	}
 
+	if ( 0 != wid && 1 != wid && 2 != wid && 4 != wid ) {
+		fprintf(stderr,"Invalid -w arg: must be 0,1,2 or 4\n");
+		return 1;
+	}
+
+	siz = 1<<siz;
 
 	if ( argc - optind < 1 || 1 != sscanf(argv[optind],"%i", &o) ) {
 		fprintf(stderr,"Need 1 or 2 args (argc: %i, optind %i)\n", argc, optind);
@@ -67,7 +84,7 @@ int  wid   = 0;
 		}
 	}
 
-	if ( ! (mio = arm_mmio_init( fnam )) ) {
+	if ( ! (mio = arm_mmio_init_1( fnam, siz )) ) {
 		goto bail;
 	}
 
