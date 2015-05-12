@@ -13,11 +13,16 @@ static int verbose = 0;
 Arm_MMIO
 arm_mmio_init(const char *fnam)
 {
+	return arm_mmio_init_1(fnam, MAP_LEN);
+}
+
+Arm_MMIO
+arm_mmio_init_1(const char *fnam, size_t len)
+{
 Arm_MMIO           rval = 0;
 int                fd;
 volatile uint32_t *bar = MAP_FAILED;
 int  i = 0, j = 0,o,v;
-size_t             len = MAP_LEN;
 
 
 	if ( (fd = open(fnam, O_RDWR)) < 0 ) {

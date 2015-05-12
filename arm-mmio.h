@@ -48,6 +48,9 @@ static inline void __bad_writel(Arm_MMIO mio, unsigned regno, uint32_t val)
 Arm_MMIO
 arm_mmio_init(const char *fnam);
 
+Arm_MMIO
+arm_mmio_init_1(const char *fnam, size_t len);
+
 void
 arm_mmio_exit(Arm_MMIO mio);
 
