@@ -10,12 +10,13 @@
 
 static void usage(const char *nm)
 {
-	fprintf(stderr,"Usage: %s [-h] [-d <uio-device-file>] [-s ld_size] [-w <width>] reg-no [val]\n", nm);
+	fprintf(stderr,"Usage: %s [-h] [-d <uio-device-file>] [-s ld_size] [-w <width>] [-n <num>] reg-no [val]\n", nm);
 	fprintf(stderr,"       NOTE: reg-no is 32-bit register #, NOT byte offset\n", nm);
 	fprintf(stderr,"    HOWEVER: if '-w <width>' is given (1,2 or 4) then the\n");
 	fprintf(stderr,"             offset IS a byte offset and thus '-w' allows\n");
 	fprintf(stderr,"             for arbitrary, unaligned access\n");
 	fprintf(stderr,"         -s  map 1<<ld_size bytes\n");
+	fprintf(stderr,"         -n  dump 'n' regs\n");
 
 }
 
@@ -24,7 +25,7 @@ main(int argc, char **argv)
 {
 const char *fnam = "/dev/uio0";
 int  rval = 1;
-int  i = 0, j = 0,o;
+int  i = 0, j = 0,o,k;
 Arm_MMIO mio = 0;
 int  opt;
 long long v;
@@ -32,8 +33,9 @@ int  drain = 0;
 int  wid   = 0;
 int  siz   = 12;
 int  *i_p;
+int  n     = 1;
 
-	while ( (opt = getopt(argc, argv, "hd:Dw:s:")) > 0 ) {
+	while ( (opt = getopt(argc, argv, "hd:Dw:s:n:")) > 0 ) {
 		i_p = 0;
 		switch ( opt ) {
 			case 'h': rval = 0;
@@ -52,7 +54,12 @@ int  *i_p;
 				i_p = &siz;
 				break;
 
-			case 'D': drain = 1;
+			case 'D':
+				drain = 1;
+				break;
+
+			case 'n':
+				i_p = &n;
 				break;
 		}
 		if ( i_p ) {
@@ -99,25 +106,28 @@ int  *i_p;
 				}
 			}
 		} else {
-			volatile uint8_t *a = (volatile uint8_t*)mio->bar;
-			a += o;
-			if ( i ) {
-				switch ( wid ) {
-					default: iowrite32( mio, o, v ); break;
-					case 1:  *a = (uint8_t)v; break;
-					case 2:  *(volatile uint16_t*)a = (uint16_t)v; break;
-					case 4:  *(volatile uint32_t*)a = (uint32_t)v; break;
+			for ( k=0; k<n; k++ ) {
+				volatile uint8_t *a = (volatile uint8_t*)mio->bar;
+				a += o;
+				if ( i ) {
+					switch ( wid ) {
+						default: iowrite32( mio, o, v ); break;
+						case 1:  *a = (uint8_t)v; break;
+						case 2:  *(volatile uint16_t*)a = (uint16_t)v; break;
+						case 4:  *(volatile uint32_t*)a = (uint32_t)v; break;
+					}
+				} else {
+					uint32_t rv;
+					const char *pre = "byte";
+					switch ( wid ) {
+						default: rv = ioread32(mio, o); pre = "reg"; break;
+						case 1:  rv = (uint32_t)*a; break;
+						case 2:  rv = (uint32_t)*(volatile uint16_t*)a; break;
+						case 4:  rv = *(volatile uint32_t*)a; break;
+					}
+					printf("%s offset 0x%08x: 0x%08x\n", pre, o, rv);
 				}
-			} else {
-				uint32_t rv;
-				const char *pre = "byte";
-				switch ( wid ) {
-					default: rv = ioread32(mio, o); pre = "reg"; break;
-					case 1:  rv = (uint32_t)*a; break;
-					case 2:  rv = (uint32_t)*(volatile uint16_t*)a; break;
-					case 4:  rv = *(volatile uint32_t*)a; break;
-				}
-				printf("%s offset 0x%08x: 0x%08x\n", pre, o, rv);
+				o += wid ? wid : 1;
 			}
 		}
 	} else {
