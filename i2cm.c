@@ -17,12 +17,15 @@
 #define CMD_WRITE (1<<(8+3))
 #define CMD_NACK  (1<<(8+4))
 
+#define ST_DON (1<<(16+0))
 #define ST_ERR (1<<(16+1))
 #define ST_ALO (1<<(16+2))	
 #define ST_BBL (1<<(16+3))
 #define ST_ACK (1<<(16+4))
 
 #define IS_ERR(status) ((status) & ST_ERR)
+
+#define FLAG_POLL (1<<0)
 
 typedef struct i2c_io_ {
 	union {
@@ -31,6 +34,7 @@ typedef struct i2c_io_ {
 	} handle;
 	uint32_t (*sync_cmd)(struct i2c_io_ *io, uint32_t cmd);
 	void     (*cleanup) (struct i2c_io_ *io);
+	int      flags;
 } i2c_io;
 
 static void slp(unsigned us)
@@ -66,12 +70,18 @@ Arm_MMIO mio = io->handle.mio;
 	iowrite32(mio, CSR, cmd);
 	/* enable IRQ   */
 	/* block for completion */
-	if ( sizeof(status) != read( mio->fd, &status, sizeof(status) ) ) {
-		fprintf(stderr,"Blocking for IRQ -- read error\n");
+	if ( (io->flags & FLAG_POLL) ) {
+		while ( ! ((status = ioread32(mio, CSR)) & ST_DON) ) {
+			slp(100);
+		}
+	} else {
+		if ( sizeof(status) != read( mio->fd, &status, sizeof(status) ) ) {
+			fprintf(stderr,"Blocking for IRQ -- read error\n");
+		}
+		/* enable IRQ   */
+		status = ioread32(mio, CSR);
+		/* enable IRQ   */
 	}
-	/* enable IRQ   */
-	status = ioread32(mio, CSR);
-	/* enable IRQ   */
 
 	if ( IS_ERR(status) ) {
 		fprintf(stderr,"Error (status 0x%08"PRIx32") ", status);
@@ -146,13 +156,14 @@ uint8_t  byte = (uint8_t)(cmd & 0xff);
 static void
 usage(const char *nm) 
 {
-	fprintf(stderr,"Usage: %s -d device [-h] [-o offset] [-a i2c_addr] [-l len] {value}\n", nm); 
+	fprintf(stderr,"Usage: %s -d device [-hp] [-o offset] [-a i2c_addr] [-l len] {value}\n", nm); 
+	fprintf(stderr,"          -p polled operation\n");
 }
 
 int
 main(int argc, char **argv)
 {
-i2c_io    io;
+i2c_io    io  = {0};
 int rval      = 1;
 int ch;
 
@@ -169,7 +180,7 @@ uint32_t sta, cmd;
 uint32_t cmd_addr;
 
 
-	while ( (ch = getopt(argc, argv, "ho:l:a:d:")) >= 0 ) {
+	while ( (ch = getopt(argc, argv, "ho:l:a:d:p")) >= 0 ) {
 		i_p = 0;
 		switch (ch) {
 			case 'h':
@@ -183,6 +194,8 @@ uint32_t cmd_addr;
 			case 'a': i_p = &slv_addr; break;
 
 			case 'd': devnam = optarg; break;
+	
+			case 'p': io.flags |= FLAG_POLL; break;
 		}
 		if ( i_p ) {
 			if ( 1 != sscanf(optarg, "%i", i_p) ) {
