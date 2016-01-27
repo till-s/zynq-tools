@@ -9,7 +9,7 @@ RANLIB=$(GNU_BIN)$(CROSS)ranlib
 
 DSTDIR=/remote
 
-APPS=snd-test mmio i2cm ldfilt mdio-10ge snd
+APPS=snd-test mmio i2cm ldfilt mdio-10ge snd mdio_bitbang
 
 LIBS=-lmmio-util
 
