@@ -1,6 +1,7 @@
 #include <arm-mmio.h>
 #include <stdio.h>
 #include <getopt.h>
+#include <time.h>
 
 #define REG_CMD 1
 #define REG_STA 5
@@ -16,21 +17,37 @@ uint32_t v = ioread32(iop, REG_CMD);
 	iowrite32(iop, REG_CMD, v);
 }
 
+static void nsdly(unsigned ns)
+{
+struct timespec dly;
+	dly.tv_sec  = 0;
+	dly.tv_nsec = ns;
+	nanosleep( &dly, 0 );
+}
+
 static int
 send_bit(Arm_MMIO iop, int bitval)
 {
+struct timespec dly;
+
 uint32_t v = ioread32(iop, REG_CMD);
+uint32_t rv;
+
 	if ( bitval )
 		v |= CMD_VAL;
 	else
 		v &= ~CMD_VAL;
 	iowrite32(iop, REG_CMD, v);
+	nsdly( 1000 );
+
 	v |= CMD_CLK;
+	rv = ioread32(iop, REG_STA);
 	iowrite32(iop, REG_CMD, v);
+	nsdly( 1000 );
 	v &= ~CMD_CLK;
 	iowrite32(iop, REG_CMD, v);
-	v = ioread32(iop, REG_STA);
-	return !!(v & STA_VAL);
+
+	return !!(rv & STA_VAL);
 }
 
 static uint16_t
@@ -43,7 +60,7 @@ printf("send word 0x%08"PRIx32"\n", tx);
 		rx = (rx<<1) | send_bit(iop, !! (tx & (1<<31)));
 		tx <<= 1;
 	}
-	return ((rx>>1) & 0xffff);
+	return (rx & 0xffff);
 }
 
 static uint16_t
