@@ -78,7 +78,7 @@ int    rv;
 
 	nsdly( 1000 );
 
-	rv = gpio_inp(iop->inp);
+	rv = gpio_get(iop->inp);
 
 	if ( rv < 0 ) {
 		perror("INTERNAL ERROR: Unable to read GPIO");
