@@ -219,28 +219,28 @@ h_impl h = (h_impl)p;
 int gpio_set(gpio_handle p)
 {
 h_impl h = (h_impl)p;
-int rval = write(h->val_fd,"1",1);
+int rval = pwrite(h->val_fd,"1",1,0);
 	return rval < 0 ? rval : 0;
 }
 
 int gpio_clr(gpio_handle p)
 {
 h_impl h = (h_impl)p;
-int rval = write(h->val_fd,"0",1);
+int rval = pwrite(h->val_fd,"0",1,0);
 	return rval < 0 ? rval : 0;
 }
 
 int gpio_out(gpio_handle p)
 {
 h_impl h = (h_impl)p;
-int rval = write(h->dir_fd,"out",3);
+int rval = pwrite(h->dir_fd,"out",3,0);
 	return rval < 0 ? rval : 0;
 }
 
 int gpio_inp(gpio_handle p)
 {
 h_impl h = (h_impl)p;
-int rval = write(h->dir_fd,"out",3);
+int rval = pwrite(h->dir_fd,"in",2,0);
 	return rval < 0 ? rval : 0;
 }
 
@@ -248,6 +248,6 @@ int  gpio_get(gpio_handle p)
 {
 h_impl        h = (h_impl)p;
 unsigned char v;
-int           rval = read(h->val_fd, &v, 1);
+int           rval = pread(h->val_fd, &v, 1, 0);
 		return rval < 0 ? rval : ( v - '0' );
 }
