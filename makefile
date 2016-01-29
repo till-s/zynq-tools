@@ -9,7 +9,7 @@ RANLIB=$(GNU_BIN)$(CROSS)ranlib
 
 DSTDIR=/remote
 
-APPS=snd-test mmio i2cm ldfilt mdio-10ge snd mdio_bitbang
+APPS=snd-test mmio i2cm ldfilt mdio-10ge snd mdio_bitbang dump-fifo
 
 LIBS=-lmmio-util
 
@@ -20,12 +20,16 @@ i2cm_LIBS=
 mdio-10ge_LIBS=
 snd_LIBS=
 
-all: $(APPS:%=$(DSTDIR)/%)
+all: $(APPS:%=$(DSTDIR)/%) libgpio.a libmmio-util.a
 
 %.o: %.c
 	$(CC) -O2 -I. -c $^
 
 libmmio-util.a: mmio-util.o
+	$(AR) cr $@ $^	
+	$(RANLIB) $@
+
+libgpio.a: gpiolib.o
 	$(AR) cr $@ $^	
 	$(RANLIB) $@
 
