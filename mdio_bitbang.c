@@ -195,7 +195,7 @@ int      use_mmio = 0;
 			default:
 				usage(argv[0]); return rval;
 		}
-		if ( 1 != sscanf(optarg,"%i",i_p) ) {
+		if ( i_p && 1 != sscanf(optarg,"%i",i_p) ) {
 			fprintf(stderr,"Unable to scan option %c\n", opt);
 			return 1;
 		}
