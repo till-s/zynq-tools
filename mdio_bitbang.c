@@ -208,16 +208,16 @@ int      use_mmio = 0;
 			return 1;
 		}
 	} else {
-		if ( ! (gpio_ctxt.clk = gpio_open( GPIO_PIN_CLK, GPIO_PIN_TYPE )) ) {
+		if ( ! (gpio_ctxt.clk = gpio_open( GPIO_PIN_CLK, GPIO_PIN_TYPE )) || gpio_out(gpio_ctxt.clk) ) {
 			fprintf(stderr,"Unable to open GPIO CLK pin\n");
 			return 1;
 		}
-		if ( ! (gpio_ctxt.out = gpio_open( GPIO_PIN_OUT, GPIO_PIN_TYPE )) ) {
+		if ( ! (gpio_ctxt.out = gpio_open( GPIO_PIN_OUT, GPIO_PIN_TYPE )) || gpio_out(gpio_ctxt.out) ) {
 			fprintf(stderr,"Unable to open GPIO OUT pin\n");
 			gpio_close(gpio_ctxt.clk);
 			return 1;
 		}
-		if ( ! (gpio_ctxt.inp = gpio_open( GPIO_PIN_INP, GPIO_PIN_TYPE )) ) {
+		if ( ! (gpio_ctxt.inp = gpio_open( GPIO_PIN_INP, GPIO_PIN_TYPE )) || gpio_inp(gpio_ctxt.inp) ) {
 			fprintf(stderr,"Unable to open GPIO INP pin\n");
 			gpio_close(gpio_ctxt.clk);
 			gpio_close(gpio_ctxt.out);
