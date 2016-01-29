@@ -4,7 +4,9 @@
 typedef void *gpio_handle;
 
 /* returns handle on success, NULL on error */
-gpio_handle gpio_open(unsigned pin, int is_emio);
+#define EMIO_PIN 1
+#define MIO_PIN  0
+gpio_handle gpio_open(unsigned pin, int pin_type);
 
 void        gpio_close(gpio_handle);
 

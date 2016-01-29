@@ -15,9 +15,11 @@ typedef struct h_impl_ {
 	int val_fd, dir_fd;
 } *h_impl;
 
-static int base = -1;
+static int base  = -1;
+static int ngpio = 0;
 
-static int fillb(char *buf, size_t bufsz, const char *fmt, ...)
+static int
+fillb(char *buf, size_t bufsz, const char *fmt, ...)
 {
 va_list ap;
 int     put;
@@ -31,6 +33,43 @@ int     put;
 	return 0;
 }
 
+static int
+get_param(const char *ctl_name, const char *param)
+{
+char buf[256];
+FILE *f = 0;
+int  got;
+int  rval = -1;
+	if ( fillb(buf, sizeof(buf), "%s%s/%s", CLASS_GPIO, ctl_name, param) )
+		return -1;
+	if ( ! (f = fopen(buf,"r")) ) {
+		fprintf(stderr,"Unable to open '%s' file: %s\n", param, strerror(errno));
+		return -1;
+	}
+	if ( 1 != (got = fscanf(f,"%d", &rval)) ) {
+		fprintf(stderr,"Unable to open 'read' file");
+		if ( got < 0 )
+			fprintf(stderr,": %s", strerror(errno));
+		fprintf(stderr,"\n");
+		rval = -1;
+	}
+	fclose(f);
+	return rval;
+}
+
+static int
+get_base(const char *ctl_name, int *b_p, int *n_p)
+{
+int b, n;
+	if ( (b = get_param(ctl_name, "base")) < 0 )
+		return -1;
+	if ( (n = get_param(ctl_name, "ngpio")) < 0 )
+		return -1;
+	*b_p = b;
+	*n_p = n;
+	return 0;
+}
+
 gpio_handle
 gpio_open(unsigned pin, int is_emio)
 {
@@ -40,14 +79,15 @@ int           st;
 char          buf[256];
 h_impl        rval = 0;
 int           fd   = -1;
-int           got;
+int           got,min;
 int           val_fd = -1;
 int           dir_fd = -1;
 int           retry;
 FILE         *f = 0;
 
-	if ( pin > 53 ) {
-		fprintf(stderr,"gpiolib: Invalid pin number (must be < 54)\n");
+
+	if ( pin >= EMIO_OFFSET ) {
+		fprintf(stderr,"gpiolib: Invalid pin number (must be < %d)\n", EMIO_OFFSET);
 		return 0;
 	}
 	if ( ! (dir = opendir( CLASS_GPIO )) ) {
@@ -66,11 +106,15 @@ FILE         *f = 0;
 			goto bail;
 		}
 
-		if ( !dentp )
+		if ( !dentp ) {
+			printf("DIR END\n");
 			goto bail; /* end reached */
+		}
 
-		if ( strncmp("gpiochip", dent.d_name, 8) || DT_DIR != dent.d_type )
+		if ( (got = strncmp("gpiochip", dent.d_name, 8)) ) {
 			continue;
+		}
+
 		if ( fillb(buf, sizeof(buf), "%s%s/label", CLASS_GPIO, dent.d_name) ) {
 			goto bail;
 		}
@@ -87,11 +131,19 @@ FILE         *f = 0;
 			continue;
 		}
 		buf[got] = 0;
-		if ( 0 == strncmp(buf, ZYNQ_GPIO, sizeof(buf)) ) {
+		min = strlen(ZYNQ_GPIO);
+		if ( sizeof(buf) < min )
+			min = sizeof(buf);
+		if ( 0 == strncmp(buf, ZYNQ_GPIO, min) ) {
 			/* Found it */
-			if ( (base = get_base( dent.d_name, pin )) < 0 )
+			if ( (get_base( dent.d_name, &base, &ngpio)) < 0 )
 				goto bail;
 		}
+	}
+
+	if ( pin >= ngpio ) {
+		fprintf(stderr,"gpiolib: invalid pin # %d (max: %d)\n", pin, ngpio - 1);
+		goto bail;
 	}
 
 	retry = 0;
@@ -125,13 +177,13 @@ FILE         *f = 0;
 		}
 	} while ( val_fd < 0 );
 
-	if ( fillb(buf, sizeof(buf), "%sgpio%d/dir", CLASS_GPIO, base + pin) )
+	if ( fillb(buf, sizeof(buf), "%sgpio%d/direction", CLASS_GPIO, base + pin) )
 		goto bail;
 
 	dir_fd = open(buf, O_RDWR);
 
 	if ( dir_fd < 0 ) {
-		fprintf(stderr,"gpiolib: unable to open 'dir' file for pin %d: %s\n", pin, strerror(errno));
+		fprintf(stderr,"gpiolib: unable to open 'direction' file for pin %d: %s\n", pin, strerror(errno));
 		goto bail;
 	}
 
