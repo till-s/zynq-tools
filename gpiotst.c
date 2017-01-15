@@ -5,7 +5,7 @@
 int
 main(int argc, char **argv)
 {
-gpio_handle gpio = gpio_open(0, EMIO_PIN);
+gpio_handle gpio = gpio_open(11, EMIO_PIN);
 int         got;
 int         i;
 
