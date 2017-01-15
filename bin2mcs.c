@@ -16,6 +16,18 @@ prcs(uint32_t cs)
 }
 
 static void
+pr4(uint32_t addr)
+{
+uint32_t ah, cs = 6;
+	printf("%s",fmt04);
+	ah = addr >> 16;
+	cs += (ah >> 8 ) & 0xff;
+	cs += (ah      ) & 0xff;
+	printf("%04"PRIX32, ah);
+	prcs(cs);
+}
+
+static void
 usage(const char *nam)
 {
 const char *s_nam = strrchr(nam, '/'); 
@@ -31,7 +43,7 @@ const char *s_nam = strrchr(nam, '/');
 int
 main(int argc, char *argv[])
 {
-uint32_t addr = 0, ah;
+uint32_t addr = 0;
 char    *fnam = 0;
 uint8_t  buf[NLIN];
 FILE    *f = 0;
@@ -77,14 +89,14 @@ int      has_base = 0;
 		return 1;
 	}
 
+	if ( 0 != (addr & 0xffff) ) {
+		pr4( addr );
+	}
+
 	while ( (got = fread(buf, 1, sizeof(buf), f)) > 0 ) {
+
 		if ( 0 == (addr & 0xffff) ) {
-			printf("%s",fmt04); cs = 6;
-			ah = addr >> 16;
-			cs += (ah >> 8 ) & 0xff;
-			cs += (ah      ) & 0xff;
-			printf("%04"PRIX32, ah);
-			prcs(cs);
+			pr4( addr );
 		}
 
 		cs  = got;
