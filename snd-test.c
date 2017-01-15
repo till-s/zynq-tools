@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <getopt.h>
+#include <unistd.h>
 
 /* period */
 #define NP 109

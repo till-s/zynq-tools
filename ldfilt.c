@@ -3,6 +3,7 @@
 #include <inttypes.h>
 #include <getopt.h>
 #include <math.h>
+#include <string.h>
 
 #define REG_IDX_FIR_INFO   0
 #define REG_IDX_COEFF_ADDR 1

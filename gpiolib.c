@@ -6,6 +6,7 @@
 #include <sys/fcntl.h>
 #include <string.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #define EMIO_OFFSET 54
 #define ZYNQ_GPIO   "zynq_gpio"

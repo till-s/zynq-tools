@@ -5,7 +5,9 @@
 #include <getopt.h>
 #include <linux/i2c-dev.h>
 #include <sys/fcntl.h>
+#include <sys/ioctl.h>
 #include <errno.h>
+#include <unistd.h>
 
 #define CSR 0
 
