@@ -1,7 +1,7 @@
 GNU_DIR=/opt/Xilinx/SDK/2013.4/gnu/arm/lin/
 GNU_BIN=$(GNU_DIR)/bin/
 CROSS=arm-xilinx-linux-gnueabi-
-GNU_BIN=/media/till/1e668486-a93f-4895-9460-bd877790aca5/buildroot/buildroot-2015.02/host/linux-x86_64/arm/usr/bin/
+GNU_BIN=/media/till/1e668486-a93f-4895-9460-bd877790aca5/buildroot/buildroot-2016.11/host/linux-x86_64/arm/usr/bin/
 CROSS=arm-linux-
 CC=$(GNU_BIN)$(CROSS)gcc
 AR=$(GNU_BIN)$(CROSS)ar
