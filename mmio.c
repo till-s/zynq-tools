@@ -10,13 +10,14 @@
 
 static void usage(const char *nm)
 {
-	fprintf(stderr,"Usage: %s [-h] [-d <uio-device-file>] [-s ld_size] [-w <width>] [-n <num>] reg-no [val]\n", nm);
+	fprintf(stderr,"Usage: %s [-h] [-d <uio-device-file>] [-s ld_size] [-w <width>] [-n <num>] [-o <off>] reg-no [val]\n", nm);
 	fprintf(stderr,"       NOTE: reg-no is 32-bit register #, NOT byte offset\n", nm);
 	fprintf(stderr,"    HOWEVER: if '-w <width>' is given (1,2 or 4) then the\n");
 	fprintf(stderr,"             offset IS a byte offset and thus '-w' allows\n");
 	fprintf(stderr,"             for arbitrary, unaligned access\n");
 	fprintf(stderr,"         -s  map 1<<ld_size bytes\n");
 	fprintf(stderr,"         -n  dump 'n' regs\n");
+	fprintf(stderr,"         -o  map device from 'off'set bytes\n");
 
 }
 
@@ -32,11 +33,14 @@ long long v;
 int  drain = 0;
 int  wid   = 0;
 int  siz   = 12;
-int  *i_p;
+int    *i_p;
+size_t *z_p;
 int  n     = 1;
+size_t off = 0;
 
-	while ( (opt = getopt(argc, argv, "hd:Dw:s:n:")) > 0 ) {
+	while ( (opt = getopt(argc, argv, "hd:Dw:s:n:o:")) > 0 ) {
 		i_p = 0;
+		z_p = 0;
 		switch ( opt ) {
 			case 'h': rval = 0;
 			default: 
@@ -61,13 +65,19 @@ int  n     = 1;
 			case 'n':
 				i_p = &n;
 				break;
+
+			case 'o':
+				z_p = &off;
+				break;
 		}
-		if ( i_p ) {
+		if ( i_p || z_p ) {
 			if ( 1 != sscanf(optarg, "%lli", &v) ) {
 				fprintf(stderr,"Invalid -%c arg: cannot scan into integer\n", opt);
 			return 1;
 			}
-			*i_p = (int)v;
+
+			if ( i_p ) *i_p = (int)v;
+			if ( z_p ) *z_p = (size_t)v;
 		}
 	}
 
@@ -91,7 +101,7 @@ int  n     = 1;
 		}
 	}
 
-	if ( ! (mio = arm_mmio_init_1( fnam, siz )) ) {
+	if ( ! (mio = arm_mmio_init_2( fnam, siz, off )) ) {
 		goto bail;
 	}
 

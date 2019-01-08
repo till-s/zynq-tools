@@ -51,6 +51,9 @@ arm_mmio_init(const char *fnam);
 Arm_MMIO
 arm_mmio_init_1(const char *fnam, size_t len);
 
+Arm_MMIO
+arm_mmio_init_2(const char *fnam, size_t len, size_t off);
+
 void
 arm_mmio_exit(Arm_MMIO mio);
 

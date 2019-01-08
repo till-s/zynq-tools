@@ -14,11 +14,17 @@ static int verbose = 0;
 Arm_MMIO
 arm_mmio_init(const char *fnam)
 {
-	return arm_mmio_init_1(fnam, MAP_LEN);
+	return arm_mmio_init_2(fnam, MAP_LEN, 0);
 }
 
 Arm_MMIO
 arm_mmio_init_1(const char *fnam, size_t len)
+{
+	return arm_mmio_init_2(fnam, len, 0);
+}
+
+Arm_MMIO
+arm_mmio_init_2(const char *fnam, size_t len, size_t off)
 {
 Arm_MMIO           rval = 0;
 int                fd;
@@ -26,12 +32,12 @@ volatile uint32_t *bar = MAP_FAILED;
 int  i = 0, j = 0,o,v;
 
 
-	if ( (fd = open(fnam, O_RDWR)) < 0 ) {
+	if ( (fd = open(fnam, O_RDWR | O_SYNC)) < 0 ) {
 		perror("opening");
 		return 0;
 	}
 
-	bar = mmap(0, len, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	bar = mmap(0, len, PROT_READ | PROT_WRITE, MAP_SHARED, fd, off);
 
 	if ( MAP_FAILED == bar ) {
 		perror("mmap failed");
