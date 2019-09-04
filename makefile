@@ -18,7 +18,7 @@ mdio_bitbang_LIBS=-lgpio
 ldfilt_LIBS=-lm
 snd-test_LIBS=-lm
 mmio_LIBS=
-i2cm_LIBS=
+i2cm_LIBS=-lgpio
 mdio-10ge_LIBS=
 snd_LIBS=
 
