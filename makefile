@@ -1,7 +1,7 @@
 GNU_DIR=/opt/Xilinx/SDK/2013.4/gnu/arm/lin/
 GNU_BIN=$(GNU_DIR)/bin/
 CROSS=arm-xilinx-linux-gnueabi-
-GNU_BIN=/media/till/1e668486-a93f-4895-9460-bd877790aca5/buildroot/buildroot-2016.11/host/linux-x86_64/arm/usr/bin/
+GNU_BIN=/media/till/1e668486-a93f-4895-9460-bd877790aca5/buildroot/buildroot-2019.08/host/linux-x86_64/arm/usr/bin/
 CROSS=arm-linux-
 CC=$(GNU_BIN)$(CROSS)gcc
 AR=$(GNU_BIN)$(CROSS)ar
@@ -9,7 +9,7 @@ RANLIB=$(GNU_BIN)$(CROSS)ranlib
 
 DSTDIR=/remote
 
-APPS=snd-test mmio i2cm ldfilt mdio-10ge snd mdio_bitbang dump-fifo gpiotst
+APPS=snd-test mmio i2cm ldfilt mdio-10ge snd mdio_bitbang dump-fifo gpiotst uioirq
 
 LIBS=-lmmio-util
 
@@ -25,7 +25,7 @@ snd_LIBS=
 all: $(APPS:%=$(DSTDIR)/%) libgpio.a libmmio-util.a
 
 %.o: %.c
-	$(CC) -O2 -I. -c $^
+	$(CC) -O2 -I. -fpic -c $^
 
 libmmio-util.a: mmio-util.o
 	$(AR) cr $@ $^	
