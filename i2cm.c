@@ -15,6 +15,8 @@
 
 #define CSR_CLR 0
 
+#define MAP_LEN 0x1000
+
 #define CMD_START (1<<(8+0))
 #define CMD_STOP  (1<<(8+1))
 #define CMD_READ  (1<<(8+2))
@@ -23,7 +25,7 @@
 
 #define ST_DON (1<<(16+0))
 #define ST_ERR (1<<(16+1))
-#define ST_ALO (1<<(16+2))	
+#define ST_ALO (1<<(16+2))
 #define ST_BBL (1<<(16+3))
 #define ST_ACK (1<<(16+4))
 
@@ -202,7 +204,7 @@ static void bb_dly(BBDat *dat)
 {
 struct timespec v;
 	v.tv_sec  = 0;
-	v.tv_nsec = 500000; 
+	v.tv_nsec = 500000;
 	nanosleep( &v, 0 );
 }
 
@@ -332,7 +334,7 @@ int     bit, val;
 		val = gpio_get( dat->sda );
 		if ( val < 0 ) {
 			fprintf(stderr, "bb_read_byte: gpio_get(SDA) failed\n");
-			bb_close( dat );	
+			bb_close( dat );
 			exit( 1 );
 		}
 		if ( val ) {
@@ -437,12 +439,13 @@ unsigned len;
 	} while (0)
 
 static void
-usage(const char *nm) 
+usage(const char *nm)
 {
-	fprintf(stderr,"Usage: %s -d device [-hp] [-o offset] [-a i2c_addr] [-l len] {value}\n", nm); 
+	fprintf(stderr,"Usage: %s -d device [-hp] [-b base_off]  [-o offset] [-a i2c_addr] [-l len] {value}\n", nm);
 	fprintf(stderr,"          -p polled operation\n");
 	fprintf(stderr,"          -d /dev/uio<X>         : i2c master in fabric/PL\n");
 	fprintf(stderr,"          -d /dev/i2c-<X>        : PS i2c master X\n");
+	fprintf(stderr,"          -b base_offset         : offset of device registers in UIO device\n");
 	fprintf(stderr,"          -d [e]mio<X>/[e]mio<Y> : bit-bang via gpio SCL pin X, SDA pin Y\n");
 }
 
@@ -459,28 +462,30 @@ int    rdoff   = 0;
 int   slv_addr = 0x50;
 int      *i_p;
 int       i,val;
-const char *devnam = 0;
+const char   *devnam = 0;
+unsigned      basoff = 0;
 
 uint32_t sta, cmd;
 
 uint32_t cmd_addr;
 
 
-	while ( (ch = getopt(argc, argv, "ho:l:a:d:p")) >= 0 ) {
+	while ( (ch = getopt(argc, argv, "ho:l:a:d:b:p")) >= 0 ) {
 		i_p = 0;
 		switch (ch) {
 			case 'h':
 				rval = 0;
-			default: 
+			default:
 				usage(argv[0]);
 				return rval;
 
 			case 'o': i_p = &romaddr;  break;
 			case 'l': i_p = &len;      break;
 			case 'a': i_p = &slv_addr; break;
+			case 'b': i_p = &basoff;   break;
 
 			case 'd': devnam = optarg; break;
-	
+
 			case 'p': io.flags |= FLAG_POLL; break;
 		}
 		if ( i_p ) {
@@ -505,7 +510,7 @@ uint32_t cmd_addr;
 		fprintf(stderr,"No device name -- use -d option\n");
 		return rval;
 	}
-	
+
 	if ( romaddr != -1 ) {
 		if ( romaddr & ~0xff ) {
 			fprintf(stderr,"Invalid offset %d (> 256)\n", len);
@@ -514,8 +519,8 @@ uint32_t cmd_addr;
 		rdoff = romaddr;
 	}
 
-	if ( strstr(devnam, "uio") ) {
-		if ( ! (io.handle.mio = arm_mmio_init( devnam )) ) {
+	if ( strstr(devnam, "uio") || strstr(devnam, "mem") ) {
+		if ( ! (io.handle.mio = arm_mmio_init_2( devnam, MAP_LEN, basoff )) ) {
 			return rval;
 		}
 		io.sync_cmd = mmio_sync_cmd;
