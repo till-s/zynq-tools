@@ -4,6 +4,10 @@
 #include <inttypes.h>
 #include <sys/types.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct arm_mmio_ {
 	volatile uint32_t *bar;
 	size_t             lim;
@@ -56,5 +60,9 @@ arm_mmio_init_2(const char *fnam, size_t len, size_t off);
 
 void
 arm_mmio_exit(Arm_MMIO mio);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
