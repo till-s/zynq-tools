@@ -347,7 +347,7 @@ int         fmt_sgnd = 0;
 			while ( (got = read(0, dat, bufsz*sizeof(*dat))) > 0 && 0 == fill_fifo(mmio, dat, got/sizeof(*dat), use_irq) )
 				;
 			/* if got > 0 then fill_fifo failed; if got < 0 then read failed */
-			rval = got != 0;
+			rval = (got != 0);
 		} else {
 			do {
 				rval = !! fill_fifo(mmio, dat, bufsz, use_irq);
